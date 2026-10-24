@@ -1,0 +1,56 @@
+[package]
+name = "pnesecrets"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Payneteasy Secrets desktop client"
+
+[[bin]]
+name = "pnesecrets"
+path = "src/main.rs"
+
+# Step 0 platform probe (PLAN 0): not shipped.
+[[bin]]
+name = "probe"
+path = "src/bin/probe/main.rs"
+
+[features]
+# Tests and local runs only: http://127.0.0.1 (the dev server) and SDROP_TEST_* tokens (sdrop README).
+test-loopback = ["pnesecrets-core/test-loopback"]
+# Self-screenshot (APP_SCREENSHOT=/abs/out.png): Window::render_to_image is GPUI test-support only.
+screenshot = ["gpui-pre/test-support", "gpui-pre-macos/test-support"]
+
+[dependencies]
+pnesecrets-core = { path = "../core" }
+zeroize.workspace = true
+# Facade of longbridge/gpui-component: pins the GPUI snapshot gpui-pre =0.3.9 (SPEC 2).
+gpui-kit = "=0.8.0"
+gpui-pre = { version = "=0.3.9", optional = true }
+arboard = { version = "=3.7.0", default-features = false }
+# Local time for "10:42 / Yesterday / Mon" (already in the tree through gpui-component).
+chrono = { version = "=0.4.45", default-features = false, features = ["clock", "std"] }
+keyring = { version = "=3.6.3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
+
+global-hotkey = "=0.9.0"
+# Linux: the StatusNotifierItem backend (ksni) instead of libappindicator + GTK (SPEC 2).
+tray-icon = { version = "=0.26.1", default-features = false }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+gpui-pre-macos = { version = "=0.3.9", optional = true }
+objc2 = "=0.6.5"
+objc2-foundation = { version = "=0.3.2", features = ["NSString", "NSError", "NSDictionary", "NSSet", "NSBundle"] }
+objc2-user-notifications = { version = "=0.3.2", features = ["block2", "UNUserNotificationCenter", "UNNotification", "UNNotificationContent", "UNNotificationRequest", "UNNotificationResponse", "UNNotificationTrigger"] }
+block2 = "=0.6.2"
+objc2-app-kit = { version = "=0.3.2", default-features = false, features = ["std", "NSPasteboard"] }
+
+[target.'cfg(target_os = "windows")'.dependencies]
+windows-sys = { version = "=0.61.2", features = ["Win32_System_DataExchange"] }
+
+[target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
+notify-rust = "=4.18.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# Wayland clipboard without XWayland (data-control protocol).
+arboard = { version = "=3.7.0", default-features = false, features = ["wayland-data-control"] }
+tray-icon = { version = "=0.26.1", default-features = false, features = ["ksni"] }

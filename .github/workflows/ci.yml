@@ -1,0 +1,44 @@
+# Checks on every push and pull request: format, lints, tests of the logic, the app build and
+# cargo deny on Linux, macOS and Windows.
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config clang cmake \
+            libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libvulkan-dev libx11-xcb-dev \
+            libxcb1-dev libfontconfig-dev libfreetype-dev libdbus-1-dev
+      - run: rustup toolchain install stable --profile minimal --component clippy,rustfmt && rustup default stable
+      - run: cargo fmt --all --check
+      - run: cargo clippy --workspace --all-targets --features pnesecrets-core/test-loopback -- -D warnings
+      - run: cargo test -p pnesecrets-core --features test-loopback
+      - run: cargo test -p pnesecrets
+      - run: cargo build -p pnesecrets --bins
+
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: curl -fsSL https://github.com/EmbarkStudios/cargo-deny/releases/download/0.20.2/cargo-deny-0.20.2-x86_64-unknown-linux-musl.tar.gz | tar xz --strip-components=1 -C /usr/local/bin
+      - run: cargo deny check

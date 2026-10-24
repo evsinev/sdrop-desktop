@@ -1,0 +1,94 @@
+# Release on a version tag: checks, packages for macOS (arm64, x86_64), Windows and Linux,
+# SHA256SUMS, build provenance attestation, a GitHub Release with fixed file names.
+name: release
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - { os: macos-latest, target: aarch64-apple-darwin, kind: macos, out: Payneteasy-Secrets-macos-arm64.dmg, native: true }
+          - { os: macos-latest, target: x86_64-apple-darwin, kind: macos, out: Payneteasy-Secrets-macos-x86_64.dmg, native: false }
+          - { os: windows-latest, target: x86_64-pc-windows-msvc, kind: windows, out: Payneteasy-Secrets-windows-x86_64.zip, native: true }
+          - { os: ubuntu-22.04, target: x86_64-unknown-linux-gnu, kind: linux, out: pnesecrets-linux-x86_64, native: true }
+    runs-on: ${{ matrix.os }}
+    env:
+      # The built-in service comes from the repository variable, not from the code.
+      SDROP_DEFAULT_ORIGIN: ${{ vars.SDROP_DEFAULT_ORIGIN }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The tag must match the workspace version.
+      - shell: bash
+        run: grep -qx "version = \"${GITHUB_REF_NAME#v}\"" Cargo.toml
+      - if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config clang cmake \
+            libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libvulkan-dev libx11-xcb-dev \
+            libxcb1-dev libfontconfig-dev libfreetype-dev libdbus-1-dev
+      - run: rustup toolchain install stable --profile minimal --target ${{ matrix.target }} && rustup default stable
+      # Release build: without test-loopback, without the screenshot feature.
+      - run: cargo build --release --locked -p pnesecrets --bin pnesecrets --target ${{ matrix.target }}
+      # The release binary must refuse http:// and know its version.
+      - if: matrix.native
+        shell: bash
+        run: |
+          bin=target/${{ matrix.target }}/release/pnesecrets
+          [ -f "$bin.exe" ] && bin="$bin.exe"
+          "$bin" --version
+          out=$(SDROP_ORIGIN=http://127.0.0.1:9 "$bin" --check-origin 2>&1) && exit 1
+          echo "$out" | grep -q "not an allowed origin"
+          if [ -n "$SDROP_DEFAULT_ORIGIN" ]; then "$bin" --check-origin; fi
+      - if: matrix.kind == 'macos'
+        run: scripts/package-macos.sh ${{ matrix.target }} ${{ matrix.out }}
+      - if: matrix.kind == 'linux'
+        run: scripts/package-linux.sh ${{ matrix.target }} ${{ matrix.out }} amd64
+      - if: matrix.kind == 'windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          New-Item -ItemType Directory -Force pkg | Out-Null
+          Copy-Item target/${{ matrix.target }}/release/pnesecrets.exe pkg/pnesecrets.exe
+          Compress-Archive -Path pkg/* -DestinationPath dist/${{ matrix.out }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ${{ matrix.out }}
+          path: dist/*
+          if-no-files-found: error
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          path: dist
+          merge-multiple: true
+      - run: cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS
+      - uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: dist/*
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG" dist/* --repo "$GITHUB_REPOSITORY" --verify-tag --prerelease \
+            --title "Payneteasy Secrets $TAG" \
+            --notes "First preview. macOS builds are not notarized (ad-hoc signed): open with right-click → Open, or run \`xattr -d com.apple.quarantine\` on the app. Windows: unpack the zip and run pnesecrets.exe. Linux: the .deb, or the tar.gz with the binary. Check files with SHA256SUMS and \`gh attestation verify <file> --repo $GITHUB_REPOSITORY\`."

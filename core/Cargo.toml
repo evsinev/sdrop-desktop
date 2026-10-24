@@ -1,0 +1,25 @@
+[package]
+name = "pnesecrets-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish.workspace = true
+description = "Payneteasy Secrets desktop: logic without UI (history, vault, clipboard, polling, operations)"
+
+[features]
+# Tests only: sdrop accepts http://127.0.0.1 and reads tokens only from SDROP_TEST_* (sdrop README).
+test-loopback = ["sdrop/test-loopback"]
+
+[dependencies]
+sdrop.workspace = true
+zeroize.workspace = true
+getrandom.workspace = true
+keyring = { version = "=3.6.3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
+serde.workspace = true
+# The agent type of sdrop::api (no redirects, one origin); the same version and TLS as sdrop.
+ureq = { version = "=3.5.0", default-features = false, features = ["rustls"] }
+serde_json.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+# Private DACL for saved files (save.rs).
+windows-sys = { version = "=0.61.2", features = ["Win32_Foundation", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_SystemServices", "Win32_System_Threading"] }
