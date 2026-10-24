@@ -190,8 +190,13 @@ mod tests {
         {
             use std::os::unix::fs::PermissionsExt;
             std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o500)).unwrap();
-            assert!(save_private(&target, b"new").is_err());
+            // Root ignores the mode (CI containers): nothing to check there.
+            let enforced = std::fs::write(dir.join("probe"), b"").is_err();
+            if enforced {
+                assert!(save_private(&target, b"new").is_err());
+            }
             std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+            let _ = std::fs::remove_file(dir.join("probe"));
             assert_eq!(std::fs::read(&target).unwrap(), b"secret bytes");
         }
         std::fs::remove_file(&target).unwrap();

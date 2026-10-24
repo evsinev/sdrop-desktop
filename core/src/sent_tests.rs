@@ -639,6 +639,11 @@ fn damaged_index_that_cannot_be_moved_is_an_error() {
     std::fs::create_dir_all(&w.dir).unwrap();
     std::fs::write(w.dir.join(crate::history::FILE_NAME), b"{broken").unwrap();
     std::fs::set_permissions(&w.dir, std::fs::Permissions::from_mode(0o500)).unwrap();
+    // Root ignores the mode (CI containers): nothing to check there.
+    if std::fs::write(w.dir.join("probe"), b"").is_ok() {
+        std::fs::set_permissions(&w.dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+        return;
+    }
     let r = Sent::open(
         HistoryStore::new(&w.dir),
         Box::new(w.vault.clone()),

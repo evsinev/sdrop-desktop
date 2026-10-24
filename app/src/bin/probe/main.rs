@@ -150,11 +150,14 @@ impl Probe {
             }
         }
         let icon = tray_icon::Icon::from_rgba(rgba, w, h).expect("icon");
-        let tray = tray_icon::TrayIconBuilder::new()
+        let b = tray_icon::TrayIconBuilder::new()
             .with_menu(Box::new(menu))
-            .with_tooltip("Payneteasy Secrets (probe)")
-            .with_icon_templated(icon)
-            .build();
+            .with_tooltip("Payneteasy Secrets (probe)");
+        #[cfg(target_os = "macos")]
+        let b = b.with_icon_templated(icon);
+        #[cfg(not(target_os = "macos"))]
+        let b = b.with_icon(icon);
+        let tray = b.build();
         match tray {
             Ok(t) => {
                 self.say("tray icon: ok");

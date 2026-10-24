@@ -48,12 +48,15 @@ pub fn create() -> Option<TrayIcon> {
         .ok()?;
     menu.append(&MenuItem::with_id("quit", "Quit", true, None))
         .ok()?;
-    TrayIconBuilder::new()
+    let b = TrayIconBuilder::new()
         .with_menu(Box::new(menu))
-        .with_tooltip("Payneteasy Secrets")
-        .with_icon_templated(icon())
-        .build()
-        .ok()
+        .with_tooltip("Payneteasy Secrets");
+    // A template image (tinted by the menu bar) exists only on macOS.
+    #[cfg(target_os = "macos")]
+    let b = b.with_icon_templated(icon());
+    #[cfg(not(target_os = "macos"))]
+    let b = b.with_icon(icon());
+    b.build().ok()
 }
 
 pub fn poll() -> Vec<TrayAction> {

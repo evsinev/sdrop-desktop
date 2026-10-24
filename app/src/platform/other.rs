@@ -12,10 +12,6 @@ pub fn install_terminate_guard() -> bool {
     false
 }
 
-pub fn bundle_id() -> Option<String> {
-    None
-}
-
 /// Wayland has no "always on top" for normal windows: the quick drop panel is a layer-shell
 /// overlay where the compositor supports it (KDE, wlroots; not GNOME), else a normal window.
 pub fn popup_kind() -> gpui_kit::WindowKind {
